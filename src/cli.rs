@@ -22,15 +22,15 @@ pub struct Cli {
     #[arg(short, long)]
     pub list: bool,
     /// Show more details by id.
-    #[arg(short = 'w', long, value_name = "ID")]
+    #[arg(short = 'w', long, value_name = "ID", value_delimiter = ',')]
     pub show: Vec<u64>,
     /// Restore the files in trash to where they come from.
     /// Input its id.
-    #[arg(short = 'R', long, value_name = "ID")]
+    #[arg(short = 'R', long, value_name = "ID", value_delimiter = ',')]
     pub restore: Vec<u64>,
     /// Delete the files from trash.
     /// Input its id.
-    #[arg(short, long, value_name = "ID")]
+    #[arg(short, long, value_name = "ID", value_delimiter = ',')]
     pub delete: Vec<u64>,
     /// Set zstd compression level once.
     #[arg(long)]
@@ -42,7 +42,7 @@ pub struct Cli {
     #[arg(long)]
     pub trash_dir: Option<PathBuf>,
     /// Add file won't be moved into trash.
-    #[arg(long)]
+    #[arg(long, value_delimiter = ',')]
     pub disable: Vec<PathBuf>,
     /// Use safe mode once.
     #[arg(long, short)]
@@ -62,7 +62,7 @@ pub struct Cli {
     pub cover: Option<CoverMode>,
     /// Restore files to another directory.
     /// It's associated with the restore's input.
-    #[arg(long, short, value_name = "PATH")]
+    #[arg(long, short, value_name = "PATH", value_delimiter = ',')]
     pub output: Vec<PathBuf>,
     /// Show detail logs.
     #[arg(long, short)]

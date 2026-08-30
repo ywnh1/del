@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{compress::PackResult, sqlite::DatabaseRow};
+use crate::sqlite::DatabaseRow;
 mod cli;
 mod compress;
 mod config;
@@ -91,11 +91,11 @@ fn main() -> Result<()> {
         for file in fs::read_dir(&todo.trash_dir)? {
             let file = file?.path();
             verbose_println!("Checking {:#?}", file);
-            if let Some(name) = file.file_name() {
-                if name.to_str() == Some("database.db") {
-                    verbose_println!("It's the database.");
-                    continue;
-                }
+            if let Some(name) = file.file_name()
+                && name.to_str() == Some("database.db")
+            {
+                verbose_println!("It's the database.");
+                continue;
             }
             let file = file.canonicalize().unwrap();
             if set.contains(&file) {
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
         let lines: Vec<DatabaseRow> = todo
             .to_remove
             .par_iter()
-            .filter_map(|p| compress::pack(&p, &todo.trash_dir, todo.level).ok())
+            .filter_map(|p| compress::pack(p, &todo.trash_dir, todo.level).ok())
             .map(|x| x.into())
             .collect();
         db.insert_many(&lines)?;
@@ -134,14 +134,18 @@ fn main() -> Result<()> {
     }
     // 恢复主逻辑
     if !todo.to_restore.is_empty() {
-        let mut ids: Vec<i64> = todo.to_restore.keys().map(|id| *id).collect();
+        let mut ids: Vec<i64> = todo.to_restore.keys().copied().collect();
         let rows = db.select_by_id(&ids)?;
         ids = rows
             .par_iter()
             .filter_map(|row| {
                 Some((
                     Path::new(&row.present_path),
-                    Path::new(&row.original_path).parent()?,
+                    if let Some(p) = todo.to_restore.get(&row.id)? {
+                        p
+                    } else {
+                        Path::new(&row.original_path).parent()?
+                    },
                     row.id,
                 ))
             })
@@ -151,6 +155,13 @@ fn main() -> Result<()> {
             })
             .collect();
         db.delete_by_id(&ids)?;
+    }
+    // 删除主逻辑
+    if !todo.to_delete.is_empty() {
+        db.delete_by_id(&todo.to_delete)?;
+    }
+    if !todo.show.is_empty() {
+        db.list_by_id(&todo.show)?;
     }
 
     Ok(())

@@ -3,13 +3,10 @@ use crate::{
     verbose_dbg, verbose_println,
 };
 use anyhow::{Result, anyhow};
-use humantime::{Duration, format_duration};
+use humantime::format_duration;
 use minus::{Pager, page_all};
 use rusqlite::{Connection, params};
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-};
+use std::{fs::File, path::Path};
 use tabled::{Table, Tabled, settings::Style};
 
 #[derive(Debug)]
@@ -161,6 +158,11 @@ impl Database {
     pub fn list_all(&mut self) -> Result<()> {
         let all = self.select_all()?;
         list(&all)?;
+        Ok(())
+    }
+    pub fn list_by_id(&mut self, ids: &[i64]) -> Result<()> {
+        let info = self.select_by_id(ids)?;
+        list(&info)?;
         Ok(())
     }
     pub fn clear(&mut self) -> Result<()> {
