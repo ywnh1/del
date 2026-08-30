@@ -4,14 +4,13 @@ use anyhow::Result;
 use blake3::Hasher;
 use std::fs;
 use std::io::{BufReader, Read, Seek};
-use std::os::unix::fs::MetadataExt;
 use std::time::SystemTime;
 use std::{
     fs::File,
     io::BufWriter,
     path::{Path, PathBuf},
 };
-use tar::{Archive, Builder, Header};
+use tar::{Archive, Builder};
 use zstd::{Decoder, Encoder};
 
 /// 获取 当前毫秒时间戳 u64
@@ -46,11 +45,10 @@ pub fn humanized_size(size: u64) -> String {
 
 #[derive(Debug, Clone, Default)]
 pub struct PackResult {
-    hash: String,
-    original_path: PathBuf,
-    present_path: PathBuf,
-    size: String,
-    time: u64,
+    pub original_path: PathBuf,
+    pub present_path: PathBuf,
+    pub size: String,
+    pub time: u64,
 }
 
 /// 打包到指定目录下，返回PackResult
@@ -58,12 +56,12 @@ pub fn pack(src: &Path, output_dir: &Path, level: i32) -> Result<PackResult> {
     // 1. 获取时间戳
     let time = timestamp_ms();
     // 2. 打包压缩
-    let mut tmp_path = output_dir.join(&format!(".tmp-{time}"));
+    let mut tmp_path = output_dir.join(format!(".tmp-{time}"));
     let mut n = 0;
     // 确保不存在
     while tmp_path.exists() {
         n += 1;
-        tmp_path = output_dir.join(&format!(".tmp-{time}-{n}"))
+        tmp_path = output_dir.join(format!(".tmp-{time}-{n}"))
     }
     let mut file = File::create(verbose_dbg!(&tmp_path))?;
     let buf_writer = BufWriter::new(&file);
@@ -89,14 +87,13 @@ pub fn pack(src: &Path, output_dir: &Path, level: i32) -> Result<PackResult> {
 
     // 4. 改名
     // 如果哈希一样，说明是同一份文件，允许覆盖，节省储存空间
-    let path = output_dir.join(&format!("{hash}.bak"));
+    let path = output_dir.join(format!("{hash}.bak"));
     fs::rename(tmp_path, &path)?;
 
     // 5. 构建返回值
     let size = humanized_size(file.metadata()?.len());
     verbose_println!("Pack {:#?} to {:#?}", src, output_dir);
     Ok(PackResult {
-        hash,
         original_path: src.into(),
         present_path: path,
         size,

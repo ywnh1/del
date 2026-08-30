@@ -8,33 +8,35 @@ use std::path::PathBuf;
 pub struct Cli {
     /// Path to the file or directory to delete.
     pub path: Vec<PathBuf>,
-    /// Remove the file using system `rm -f`.
+    /// Remove the file forever.
     /// This will not be worked in the safe mode.
     #[arg(short, long)]
     pub force: bool,
-    /// Remove the file using system `rm -r`.
+    /// Remove the file recursively.
+    /// Only used with force.
+    /// Without force, it's automatical.
     /// This will not be worked in the safe mode.
     #[arg(short, long)]
     pub recursive: bool,
     /// List all files in your trash.
     #[arg(short, long)]
     pub list: bool,
-    /// Show more details by short hash.
-    #[arg(short = 'w', long)]
+    /// Show more details by id.
+    #[arg(short = 'w', long, value_name = "SHORT_HASH")]
     pub show: Vec<String>,
     /// Restore the files in trash to where they come from.
-    /// Input it's long or short hash.
-    #[arg(short = 'R', long)]
+    /// Input its id.
+    #[arg(short = 'R', long, value_name = "HASH")]
     pub restore: Vec<String>,
     /// Delete the files from trash.
-    /// Input it's long or short hash.
-    #[arg(short, long)]
+    /// Input its id.
+    #[arg(short, long, value_name = "HASH")]
     pub delete: Vec<String>,
     /// Set zstd compression level once.
     #[arg(long)]
     pub level: Option<i32>,
     /// Set how long files are allowed to be saved in trash once.
-    #[arg(long)]
+    #[arg(long, value_name = "DAYS")]
     pub save_time: Option<u32>,
     /// Set trash once.
     #[arg(long)]
@@ -52,12 +54,15 @@ pub struct Cli {
     /// Save them to trash without deleting them.
     #[arg(long, short = 'S')]
     pub save: bool,
+    /// Clear your trash.
+    #[arg(long, short)]
+    pub clear: bool,
     /// Set what will happen if there's a file already there which may be covered
-    #[arg(long, short = 'C')]
+    #[arg(long, short = 'C', value_name = "COVER_MODE")]
     pub cover: Option<CoverMode>,
     /// Restore files to another directory.
     /// It's associated with the restore's input.
-    #[arg(long, short)]
+    #[arg(long, short, value_name = "PATH")]
     pub output: Vec<PathBuf>,
     /// Show detail logs.
     #[arg(long, short)]

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rayon::prelude::*;
 mod cli;
 mod compress;
 mod config;
@@ -12,7 +13,7 @@ macro_rules! input {
 
     ($($arg:tt)*) => {{
         use ::std::io::Write as _;
-        let _guard = crate::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = $crate::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         print!($($arg)*);
         ::std::io::stdout().flush().expect("stdout flush failed");
         let mut buf = String::new();
@@ -31,7 +32,7 @@ macro_rules! input {
 #[macro_export]
 macro_rules! verbose_println {
     ($($arg:tt)*) => {
-        if *crate::VERBOSE.get().unwrap(){
+        if *$crate::VERBOSE.get().unwrap_or(&false){
             let info = format!("[{}:{}]",file!(),line!());
             let msg = format!($($arg)*);
             eprintln!("{info}{msg}");
@@ -41,7 +42,7 @@ macro_rules! verbose_println {
 #[macro_export]
 macro_rules! verbose_dbg {
     ($arg:expr) => {{
-        if *crate::VERBOSE.get().unwrap() {
+        if *$crate::VERBOSE.get().unwrap_or(&false) {
             dbg!($arg)
         } else {
             $arg
@@ -51,6 +52,10 @@ macro_rules! verbose_dbg {
 
 fn main() -> Result<()> {
     let todo = verbose_dbg!(config::init())?;
-
+    /*
+        if !todo.to_remove.is_empty() {
+            todo.to_remove.par_iter().for_each(|p| {});
+        }
+    */
     Ok(())
 }

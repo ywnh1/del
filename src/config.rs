@@ -86,15 +86,14 @@ pub fn init() -> Result<Todo> {
                 return None;
             } else {
                 for disable in &config.disable_list {
-                    if disable.exists() {
-                        if disable
+                    if disable.exists()
+                        && disable
                             .canonicalize()
                             .ok()?
                             .strip_prefix(p.canonicalize().ok()?)
                             .is_ok()
-                        {
-                            return None;
-                        }
+                    {
+                        return None;
                     }
                 }
             }
@@ -118,6 +117,7 @@ pub fn init() -> Result<Todo> {
         save_time: config.save_time,
         trash_dir: config.trash_dir,
         list: cli.list,
+        clear: cli.clear,
     })
 }
 
@@ -147,4 +147,5 @@ pub struct Todo {
     pub trash_dir: PathBuf,
 
     pub list: bool,
+    pub clear: bool,
 }
