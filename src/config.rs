@@ -1,5 +1,5 @@
 use crate::cli::Cli;
-use crate::{VERBOSE, verbose_dbg};
+use crate::{VERBOSE, verbose_dbg, verbose_println};
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use dirs_next::home_dir;
@@ -13,6 +13,7 @@ use std::{collections::HashMap, path::PathBuf};
 #[derive(
     Debug, Copy, Clone, Hash, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize, ValueEnum,
 )]
+#[serde(rename_all = "lowercase")]
 pub enum CoverMode {
     Always,
     Ask,
@@ -47,7 +48,7 @@ fn load_config() -> Result<Config, figment::Error> {
         .merge(Toml::file(
             home_dir().unwrap().join(".config/del/config.toml"),
         ))
-        .merge(Env::prefixed("DEL_").split("_"))
+        .merge(Env::prefixed("DEL_"))
         .extract()
 }
 /// 同时加载config和cli
@@ -56,6 +57,15 @@ pub fn init() -> Result<Todo> {
     let cli = Cli::parse();
 
     VERBOSE.set(cli.verbose).unwrap();
+
+    verbose_println!(
+        "Config loaded: cover_mode={:?}, compression_level={}, save_time={}, trash_dir={:#?}, safe_mode={}",
+        config.cover_mode,
+        config.compression_level,
+        config.save_time,
+        config.trash_dir,
+        config.safe_mode
+    );
 
     // cli 优先级高于config
     if let Some(c) = cli.cover {
@@ -93,6 +103,7 @@ pub fn init() -> Result<Todo> {
                             .strip_prefix(p.canonicalize().ok()?)
                             .is_ok()
                     {
+                        verbose_println!("Skip {:#?}: contains disabled path {:#?}", p, disable);
                         return None;
                     }
                 }
@@ -128,25 +139,26 @@ pub fn init() -> Result<Todo> {
 
 #[derive(Debug, Clone)]
 pub struct Todo {
-    /// 要被删除的路径
+    /// Paths to delete
     pub to_remove: Vec<PathBuf>,
-    /// 是否强制删除
+    /// Whether to delete forever instead of moving to the trash
     pub force: bool,
-    /// 只有 force 为 true 生效
+    /// Only effective when `force` is true
     pub recursive: bool,
+    /// Pack into the trash without removing the originals
     pub save: bool,
     pub level: i32,
 
-    /// 要被恢复的哈希，和可能有的自定义恢复位置
+    /// Trash ids to restore, with an optional custom output directory
     pub to_restore: HashMap<i64, Option<PathBuf>>,
     pub cover: CoverMode,
 
-    /// 要被删除的哈希
+    /// Trash ids to delete from the records
     pub to_delete: Vec<i64>,
 
-    /// 是否要 Auto clean
+    /// Whether to auto clean the trash
     pub autoclearn: bool,
-    /// 只有上面true才生效
+    /// Only effective when `autoclearn` is true
     pub save_time: u32,
 
     pub trash_dir: PathBuf,

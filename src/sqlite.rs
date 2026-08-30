@@ -15,12 +15,15 @@ pub struct Database {
 }
 #[derive(Debug, Clone, Default)]
 pub struct DatabaseRow {
-    /// 自增主键
+    /// Auto-increment primary key
     pub id: i64,
-    /// 原路径
+    /// Original path before it was trashed
     pub original_path: String,
+    /// Current path of the packed file in the trash
     pub present_path: String,
+    /// Human-readable size
     pub size: String,
+    /// Trash time as a millisecond timestamp
     pub time: i64,
 }
 
@@ -52,12 +55,15 @@ impl TryFrom<&DatabaseRow> for TableRow {
             id: x.id,
             name: Path::new(&x.original_path)
                 .file_name()
-                .ok_or(anyhow!("fali to get {}'s name", x.original_path))?
+                .ok_or(anyhow!("failed to get file name of {}", x.original_path))?
                 .display()
                 .to_string(),
             path: Path::new(&x.original_path)
                 .parent()
-                .ok_or(anyhow!("fali to get {}'s parents dir", x.original_path))?
+                .ok_or(anyhow!(
+                    "failed to get parent directory of {}",
+                    x.original_path
+                ))?
                 .display()
                 .to_string(),
             size: x.size.to_string(),
@@ -91,9 +97,11 @@ impl Database {
     pub fn insert_many(&mut self, lines: &[DatabaseRow]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
-            let mut stmt = tx.prepare("
-                INSERT INTO trash (hash,original_path,present_path,size,time) VALUES (?1,?2,?3,?4,?5)
-            ")?;
+            let mut stmt = tx.prepare(
+                "
+                INSERT INTO trash (original_path,present_path,size,time) VALUES (?1,?2,?3,?4)
+            ",
+            )?;
             for dbl in lines {
                 stmt.execute(params![
                     dbl.original_path,
@@ -140,19 +148,26 @@ impl Database {
     }
     pub fn delete_by_id(&mut self, ids: &[i64]) -> Result<()> {
         let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("DELETE FROM trash WHERE id = ?1")?;
-        for id in ids {
-            stmt.execute(params![id])?;
-            verbose_println!("The rows with a id of {id} is deleted");
+        {
+            let mut stmt = tx.prepare("DELETE FROM trash WHERE id = ?1")?;
+            for id in ids {
+                let affected = stmt.execute(params![id])?;
+                verbose_println!("Deleted row with id {id} (affected: {affected})");
+            }
         }
+        tx.commit()?;
+        verbose_println!("Committed deletion of {} row(s)", ids.len());
         Ok(())
     }
     pub fn delete_by_time(&mut self, days: u32) -> Result<()> {
         let timestamp = n_days_ago(days) as i64;
         let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("DELETE FROM trash WHERE time < ?1")?;
-        stmt.execute(params![timestamp])?;
-        verbose_println!("The rows {days} days ago is deleted");
+        {
+            let mut stmt = tx.prepare("DELETE FROM trash WHERE time < ?1")?;
+            let affected = stmt.execute(params![timestamp])?;
+            verbose_println!("Deleted {affected} row(s) older than {days} days");
+        }
+        tx.commit()?;
         Ok(())
     }
     pub fn list_all(&mut self) -> Result<()> {
@@ -167,6 +182,7 @@ impl Database {
     }
     pub fn clear(&mut self) -> Result<()> {
         self.conn.execute_batch("DROP TABLE IF EXISTS trash;")?;
+        verbose_println!("Trash table cleared");
         Ok(())
     }
 }

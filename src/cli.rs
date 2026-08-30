@@ -6,65 +6,63 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Path to the file or directory to delete.
+    /// File or directory to delete.
     pub path: Vec<PathBuf>,
-    /// Remove the file forever.
-    /// This will not be worked in the safe mode.
+    /// Remove the file forever instead of moving it to the trash.
+    /// Ignored while safe mode is on.
     #[arg(short, long)]
     pub force: bool,
-    /// Remove the file recursively.
-    /// Only used with force.
-    /// Without force, it's automatical.
-    /// This will not be worked in the safe mode.
+    /// Remove directories recursively with --force.
+    /// Without --force, directories are packed recursively automatically.
     #[arg(short, long)]
     pub recursive: bool,
-    /// List all files in your trash.
+    /// List all entries currently in the trash.
     #[arg(short, long)]
     pub list: bool,
-    /// Show more details by id.
+    /// Show details of trash entries by id (comma-separated).
     #[arg(short = 'w', long, value_name = "ID", value_delimiter = ',')]
     pub show: Vec<u64>,
-    /// Restore the files in trash to where they come from.
-    /// Input its id.
+    /// Restore trash entries by id (comma-separated).
+    /// Restored to the original location, or to --output if given.
     #[arg(short = 'R', long, value_name = "ID", value_delimiter = ',')]
     pub restore: Vec<u64>,
-    /// Delete the files from trash.
-    /// Input its id.
+    /// Delete trash records by id (comma-separated).
+    /// The packed files stay on disk until --autoclean collects them.
     #[arg(short, long, value_name = "ID", value_delimiter = ',')]
     pub delete: Vec<u64>,
-    /// Set zstd compression level once.
+    /// Set the zstd compression level for this run (default: 3).
     #[arg(long)]
     pub level: Option<i32>,
-    /// Set how long files are allowed to be saved in trash once.
+    /// Keep trash entries for this many days before --autoclean removes them.
     #[arg(long, value_name = "DAYS")]
     pub save_time: Option<u32>,
-    /// Set trash once.
+    /// Use this directory as the trash (default: ~/.trash).
     #[arg(long)]
     pub trash_dir: Option<PathBuf>,
-    /// Add file won't be moved into trash.
+    /// Paths that must never be deleted.
+    /// Any path to delete that contains (or equals) one of these paths
+    /// will be skipped and kept where it is.
     #[arg(long, value_delimiter = ',')]
     pub disable: Vec<PathBuf>,
-    /// Use safe mode once.
+    /// Enable safe mode for this run (default: on).
     #[arg(long, short)]
     pub safe: bool,
-    /// Clean trash automatically.
-    /// It will remove files out of date and files with no record in the database forever.
+    /// Clean the trash: drop expired records and delete files with no record.
     #[arg(long, short)]
     pub autoclean: bool,
-    /// Save them to trash without deleting them.
+    /// Pack paths into the trash without removing the originals.
     #[arg(long, short = 'S')]
     pub save: bool,
-    /// Clear your trash.
+    /// Drop all trash records. Packed files stay until --autoclean.
     #[arg(long, short)]
     pub clear: bool,
-    /// Set what will happen if there's a file already there which may be covered
+    /// What to do when a restore target already exists: always, ask, never.
     #[arg(long, short = 'C', value_name = "COVER_MODE")]
     pub cover: Option<CoverMode>,
-    /// Restore files to another directory.
-    /// It's associated with the restore's input.
+    /// Restore to custom directories, one per --restore id (comma-separated).
     #[arg(long, short, value_name = "PATH", value_delimiter = ',')]
     pub output: Vec<PathBuf>,
-    /// Show detail logs.
+    /// Print verbose debug logs.
     #[arg(long, short)]
     pub verbose: bool,
 }

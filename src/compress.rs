@@ -1,6 +1,6 @@
 use crate::config::CoverMode;
 use crate::{input, verbose_dbg, verbose_println};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use blake3::Hasher;
 use std::fs;
 use std::io::{BufReader, Read, Seek};
@@ -13,17 +13,20 @@ use std::{
 use tar::{Archive, Builder};
 use zstd::{Decoder, Encoder};
 
-/// 获取 当前毫秒时间戳 u64
+// Per-process counter so parallel pack() calls never collide on tmp names.
+static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Current time as a millisecond UNIX timestamp (u64).
 #[inline]
 pub fn timestamp_ms() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        // 系统时钟不可能早于1970，unwrap安全
+        // The system clock cannot predate 1970; unwrap is safe.
         .unwrap()
         .as_millis() as u64
 }
 
-/// 计算 人类可读的大小
+/// Format a byte count as a human-readable size.
 #[inline]
 pub fn humanized_size(size: u64) -> String {
     const KIB: u64 = 1024;
@@ -53,21 +56,37 @@ pub struct PackResult {
 
 /// 打包到指定目录下，返回PackResult
 pub fn pack(src: &Path, output_dir: &Path, level: i32) -> Result<PackResult> {
-    // 1. 获取时间戳
+    // 1. Timestamp + unique sequence number for the temp file
     let time = timestamp_ms();
-    // 2. 打包压缩
-    let mut tmp_path = output_dir.join(format!(".tmp-{time}"));
+    let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // 2. Pack and compress
+    let mut tmp_path = output_dir.join(format!(".tmp-{time}-{seq}"));
     let mut n = 0;
-    // 确保不存在
+    // Make sure the temp name is free
     while tmp_path.exists() {
         n += 1;
-        tmp_path = output_dir.join(format!(".tmp-{time}-{n}"))
+        tmp_path = output_dir.join(format!(".tmp-{time}-{seq}-{n}"))
     }
-    let mut file = File::create(verbose_dbg!(&tmp_path))?;
+    // Open with read+write: the fd is used again below to hash the file.
+    let mut file = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(verbose_dbg!(&tmp_path))?;
     let buf_writer = BufWriter::new(&file);
     let encoder = Encoder::new(buf_writer, level)?;
     let mut tar_builder = Builder::new(encoder);
-    tar_builder.append_path(src)?;
+    // tar rejects absolute paths, so archive under a relative entry name:
+    // a file becomes "<name>", a directory becomes "<name>/..." recursively.
+    let entry_name = src
+        .file_name()
+        .ok_or_else(|| anyhow!("invalid path for packing: {src:?}"))?;
+    if src.is_dir() {
+        tar_builder.append_dir_all(entry_name, src)?;
+    } else {
+        tar_builder.append_path_with_name(src, entry_name)?;
+    }
     let encoder = tar_builder.into_inner()?;
     let buf_writer = encoder.finish()?;
     drop(buf_writer);
@@ -85,14 +104,16 @@ pub fn pack(src: &Path, output_dir: &Path, level: i32) -> Result<PackResult> {
     }
     let hash = verbose_dbg!(hasher.finalize().to_string());
 
-    // 4. 改名
-    // 如果哈希一样，说明是同一份文件，允许覆盖，节省储存空间
+    // 4. Rename to the content hash.
+    // Same content hashes to the same name, so identical files overwrite
+    // each other: each unique file is stored only once.
     let path = output_dir.join(format!("{hash}.bak"));
     fs::rename(tmp_path, &path)?;
+    verbose_println!("Stored as {:#?}", path);
 
     // 5. 构建返回值
     let size = humanized_size(file.metadata()?.len());
-    verbose_println!("Pack {:#?} to {:#?}", src, output_dir);
+    verbose_println!("Packed {src:?} into {output_dir:?}");
     Ok(PackResult {
         original_path: src.into(),
         present_path: path,
@@ -101,13 +122,23 @@ pub fn pack(src: &Path, output_dir: &Path, level: i32) -> Result<PackResult> {
     })
 }
 
-/// 解包到指定目录
-pub fn unpack(src: &Path, output_dir: &Path, cover: CoverMode) -> Result<()> {
+/// Unpack results: how many entries were restored vs skipped.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UnpackStats {
+    /// Entries successfully restored.
+    pub restored: usize,
+    /// Entries skipped because the cover mode refused to overwrite.
+    pub skipped: usize,
+}
+
+/// Unpack an archive into `output_dir`, returning restore/skip statistics.
+pub fn unpack(src: &Path, output_dir: &Path, cover: CoverMode) -> Result<UnpackStats> {
     let file = File::open(src)?;
     let buf_reader = BufReader::new(file);
     let decoder = Decoder::new(buf_reader)?;
     let mut archive = Archive::new(decoder);
     fs::create_dir_all(output_dir)?;
+    let mut stats = UnpackStats::default();
     match cover {
         CoverMode::Always => {
             archive.unpack(output_dir)?;
@@ -122,24 +153,34 @@ pub fn unpack(src: &Path, output_dir: &Path, cover: CoverMode) -> Result<()> {
                         CoverMode::Always => {
                             unreachable!();
                         }
-                        CoverMode::Never => {}
+                        CoverMode::Never => {
+                            verbose_println!("Skip {:#?}: {:#?} already exists", dest, output_dir);
+                            stats.skipped += 1;
+                        }
                         CoverMode::Ask => {
-                            match input!("{:#?} is exists, do you want to cover it?[Y/n] ", dest)
-                                .as_str()
-                            {
+                            match input!("{dest:?} already exists. Overwrite it? [Y/n] ").as_str() {
                                 "Y" | "y" => {
                                     entry.unpack_in(output_dir)?;
+                                    stats.restored += 1;
                                 }
-                                _ => {}
+                                _ => {
+                                    verbose_println!("User declined to overwrite {dest:?}");
+                                    stats.skipped += 1;
+                                }
                             }
                         }
                     }
                 } else {
                     entry.unpack_in(output_dir)?;
+                    stats.restored += 1;
                 }
             }
         }
     }
-    verbose_println!("Unpack {:#?} to {:#?}", src, output_dir);
-    Ok(())
+    verbose_println!(
+        "Unpack {src:?} to {output_dir:?}: restored {} entries, skipped {} entries",
+        stats.restored,
+        stats.skipped
+    );
+    Ok(stats)
 }
