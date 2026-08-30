@@ -189,7 +189,7 @@ impl Database {
 
 #[inline]
 pub fn n_days_ago(n: u32) -> u64 {
-    timestamp_ms().saturating_sub(n as u64 * 86400_000)
+    timestamp_ms().saturating_sub(n as u64 * 86_400_000)
 }
 
 pub fn n_days_ago_humanlize(then: i64) -> String {
