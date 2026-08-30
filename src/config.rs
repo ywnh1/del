@@ -30,14 +30,38 @@ struct Config {
 }
 impl Default for Config {
     fn default() -> Self {
-        let trash_dir = home_dir().unwrap().join(".trash");
+        let home = home_dir().expect("could not locate home directory");
+        let trash_dir = home.join(".trash");
         Self {
             cover_mode: CoverMode::Ask,
             compression_level: 3,
             save_time: 30,
             trash_dir: trash_dir.clone(),
             safe_mode: true,
-            disable_list: vec![trash_dir, home_dir().unwrap(), PathBuf::from("/boot")],
+            // Protect the trash, the home directory, and critical system
+            // directories. Deleting a protected path (or any parent that
+            // contains one) is skipped. Unknown/nonexistent entries are
+            // ignored at check time, so this list is safe to grow.
+            disable_list: vec![
+                trash_dir,
+                home,
+                PathBuf::from("/"),
+                PathBuf::from("/boot"),
+                PathBuf::from("/etc"),
+                PathBuf::from("/usr"),
+                PathBuf::from("/var"),
+                PathBuf::from("/bin"),
+                PathBuf::from("/sbin"),
+                PathBuf::from("/lib"),
+                PathBuf::from("/lib64"),
+                PathBuf::from("/opt"),
+                PathBuf::from("/root"),
+                PathBuf::from("/home"),
+                PathBuf::from("/proc"),
+                PathBuf::from("/sys"),
+                PathBuf::from("/dev"),
+                PathBuf::from("/tmp"),
+            ],
         }
     }
 }
@@ -165,4 +189,31 @@ pub struct Todo {
     pub show: Vec<i64>,
     pub list: bool,
     pub clear: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_disable_list_protects_critical_directories() {
+        let config = Config::default();
+        let list = config
+            .disable_list
+            .iter()
+            .filter_map(|p| p.to_str())
+            .collect::<Vec<_>>();
+        for critical in [
+            "/", "/boot", "/etc", "/usr", "/var", "/bin", "/sbin", "/lib", "/lib64", "/opt",
+            "/root", "/home", "/proc", "/sys", "/dev", "/tmp",
+        ] {
+            assert!(
+                list.contains(&critical),
+                "default disable_list should protect {critical}"
+            );
+        }
+        // The trash itself and the home directory are also protected.
+        assert!(list.iter().any(|p| p.ends_with(".trash")));
+        assert!(list.iter().any(|p| p.starts_with("/home/")));
+    }
 }

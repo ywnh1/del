@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "snapshot_sequence": 25,
+  "snapshot_sequence": 28,
   "agents": [
     {
       "id": "agent_48f58441",
@@ -475,9 +475,9 @@
           }
         ]
       },
-      "duration_ms": 1946489,
+      "duration_ms": 1959641,
       "allowed_tools": [],
-      "updated_at_ms": 1788089228093,
+      "updated_at_ms": 1788089557528,
       "session_boot_id": "boot_fb2e593e-95b",
       "owner_session_id": "760ad3c1-0d20-46f1-83bf-b30c0428b8ba"
     },
@@ -918,9 +918,9 @@
           }
         ]
       },
-      "duration_ms": 1327378,
+      "duration_ms": 1340530,
       "allowed_tools": [],
-      "updated_at_ms": 1788089228093,
+      "updated_at_ms": 1788089557528,
       "session_boot_id": "boot_fb2e593e-95b",
       "owner_session_id": "760ad3c1-0d20-46f1-83bf-b30c0428b8ba"
     }
