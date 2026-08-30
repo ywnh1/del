@@ -102,20 +102,25 @@ pub fn init() -> Result<Todo> {
         .collect();
     let mut to_restore = HashMap::with_capacity(cli.restore.len());
     for i in 0..cli.restore.len() {
-        to_restore.insert(cli.restore[i].clone(), cli.output.get(i).cloned());
+        to_restore.insert(cli.restore[i] as i64, cli.output.get(i).cloned());
     }
     Ok(Todo {
         to_remove,
-        force: if config.safe_mode { false } else { cli.force },
+        force: if config.safe_mode || cli.save {
+            false
+        } else {
+            cli.force
+        },
         recursive: cli.recursive,
         save: cli.save,
         level: config.compression_level,
         to_restore,
         cover: config.cover_mode,
-        to_delete: cli.delete,
+        to_delete: cli.delete.iter().map(|&x| x as i64).collect(),
         autoclearn: cli.autoclean,
         save_time: config.save_time,
         trash_dir: config.trash_dir,
+        show: cli.show.iter().map(|&x| x as i64).collect(),
         list: cli.list,
         clear: cli.clear,
     })
@@ -133,11 +138,11 @@ pub struct Todo {
     pub level: i32,
 
     /// 要被恢复的哈希，和可能有的自定义恢复位置
-    pub to_restore: HashMap<String, Option<PathBuf>>,
+    pub to_restore: HashMap<i64, Option<PathBuf>>,
     pub cover: CoverMode,
 
     /// 要被删除的哈希
-    pub to_delete: Vec<String>,
+    pub to_delete: Vec<i64>,
 
     /// 是否要 Auto clean
     pub autoclearn: bool,
@@ -145,7 +150,7 @@ pub struct Todo {
     pub save_time: u32,
 
     pub trash_dir: PathBuf,
-
+    pub show: Vec<i64>,
     pub list: bool,
     pub clear: bool,
 }

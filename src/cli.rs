@@ -22,16 +22,16 @@ pub struct Cli {
     #[arg(short, long)]
     pub list: bool,
     /// Show more details by id.
-    #[arg(short = 'w', long, value_name = "SHORT_HASH")]
-    pub show: Vec<String>,
+    #[arg(short = 'w', long, value_name = "ID")]
+    pub show: Vec<u64>,
     /// Restore the files in trash to where they come from.
     /// Input its id.
-    #[arg(short = 'R', long, value_name = "HASH")]
-    pub restore: Vec<String>,
+    #[arg(short = 'R', long, value_name = "ID")]
+    pub restore: Vec<u64>,
     /// Delete the files from trash.
     /// Input its id.
-    #[arg(short, long, value_name = "HASH")]
-    pub delete: Vec<String>,
+    #[arg(short, long, value_name = "ID")]
+    pub delete: Vec<u64>,
     /// Set zstd compression level once.
     #[arg(long)]
     pub level: Option<i32>,
