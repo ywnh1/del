@@ -12,6 +12,7 @@ mod cli;
 mod compress;
 mod config;
 mod sqlite;
+mod tui;
 
 static VERBOSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

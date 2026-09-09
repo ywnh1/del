@@ -62,6 +62,9 @@ pub struct Cli {
     /// Restore to custom directories, one per --restore id (comma-separated).
     #[arg(long, short, value_name = "PATH", value_delimiter = ',')]
     pub output: Vec<PathBuf>,
+    /// Use TUI mode to select paths.
+    #[arg(long, short, value_name = "PATH", default_missing_value = ".",num_args=0..=1)]
+    pub tui: Option<PathBuf>,
     /// Print verbose debug logs.
     #[arg(long, short)]
     pub verbose: bool,

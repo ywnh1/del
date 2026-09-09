@@ -4,16 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.104"
+anyhow = "1.0"
 blake3 = "1.8.7"
-clap = { version = "4.6.6", features = ["derive", "unicode", "cargo", "color"] }
-dirs-next = "2.0.0"
-figment = { version = "0.10.19", features = ["toml", "env"] }
-humantime = "2.4.0"
-minus = { version = "5.7.2", features = ["search", "static_output"] }
-rayon = "1.12.0"
-rusqlite = { version = "0.40.2", features = ["bundled", "load_extension"] }
-serde = { version = "1.0.229", features = ["derive"] }
-tabled = "0.21.0"
-tar = "0.4.46"
-zstd = "0.13.3"
+clap = { version = "4.6", features = ["derive", "unicode", "cargo", "color"] }
+crossterm = "0.29.0"
+dirs-next = "2.0"
+figment = { version = "0.10", features = ["toml", "env"] }
+humantime = "2.4"
+minus = { version = "5.7", features = ["search", "static_output"] }
+ratatui = "0.30.2"
+rayon = "1.12"
+rusqlite = { version = "0.40", features = ["bundled", "load_extension"] }
+serde = { version = "1.0", features = ["derive"] }
+tabled = "0.21"
+tar = "0.4"
+zstd = "0.13"

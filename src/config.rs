@@ -1,4 +1,5 @@
 use crate::cli::Cli;
+use crate::tui::main_loop;
 use crate::{VERBOSE, verbose_dbg, verbose_println};
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
@@ -90,6 +91,10 @@ pub fn init() -> Result<Todo> {
         config.trash_dir,
         config.safe_mode
     );
+
+    if let Some(path) = cli.tui {
+        main_loop(path).unwrap();
+    }
 
     // cli 优先级高于config
     if let Some(c) = cli.cover {
