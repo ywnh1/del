@@ -67,14 +67,15 @@ impl Default for Config {
     }
 }
 
-fn load_config() -> Result<Config, figment::Error> {
-    Figment::new()
+fn load_config() -> Result<Config, Box<figment::Error>> {
+    let res = Figment::new()
         .merge(Serialized::defaults(Config::default()))
         .merge(Toml::file(
             home_dir().unwrap().join(".config/del/config.toml"),
         ))
         .merge(Env::prefixed("DEL_"))
-        .extract()
+        .extract()?;
+    Ok(res)
 }
 /// 同时加载config和cli
 pub fn init() -> Result<Todo> {

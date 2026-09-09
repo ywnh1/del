@@ -142,7 +142,7 @@ impl File {
         self.path
             .file_name()
             .and_then(|os| os.to_str())
-            .unwrap_or(&self.path.to_str().unwrap_or("."))
+            .unwrap_or(self.path.to_str().unwrap_or("."))
     }
 }
 #[derive(Debug, Clone)]
@@ -188,13 +188,13 @@ enum SendMsg {
 }
 
 #[derive(Debug)]
-struct TUI<'a> {
+struct Tui<'a> {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     weights: UI<'a>,
     list_state: ListState,
 }
 
-impl<'a> TUI<'a> {
+impl<'a> Tui<'a> {
     fn new() -> Result<Self> {
         let backend = CrosstermBackend::new(stdout());
         let terminal = Terminal::new(backend)?;
@@ -307,7 +307,7 @@ pub fn main_loop(path: PathBuf) -> Result<()> {
         let _ = tx.send(root);
     });
 
-    let mut tui = TUI::new()?;
+    let mut tui = Tui::new()?;
     let root = loop {
         let msg = match rx.recv()? {
             SendMsg::Working(s) => s,
