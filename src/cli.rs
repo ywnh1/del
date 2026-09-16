@@ -1,5 +1,5 @@
 use crate::config::CoverMode;
-use clap::Parser;
+use clap::{ArgAction::Append, Parser};
 use std::path::PathBuf;
 
 /// Delete files and directories safely and securely.
@@ -23,16 +23,16 @@ pub struct Cli {
     #[arg(short, long)]
     pub list: bool,
     /// Show details of trash entries by id (comma-separated).
-    #[arg(short = 'w', long, value_name = "ID", value_delimiter = ',')]
-    pub show: Vec<u64>,
+    #[arg(short = 'w', long, value_name = "ID", value_parser = parse_ids,action=Append)]
+    pub show: Vec<Vec<u64>>,
     /// Restore trash entries by id (comma-separated).
     /// Restored to the original location, or to --output if given.
-    #[arg(short = 'R', long, value_name = "ID", value_delimiter = ',')]
-    pub restore: Vec<u64>,
+    #[arg(short = 'R', long, value_name = "ID", value_parser = parse_ids,action=Append)]
+    pub restore: Vec<Vec<u64>>,
     /// Delete trash records by id (comma-separated).
     /// The packed files stay on disk until --autoclean collects them.
-    #[arg(short, long, value_name = "ID", value_delimiter = ',')]
-    pub delete: Vec<u64>,
+    #[arg(short, long, value_name = "ID", value_parser = parse_ids,action=Append)]
+    pub delete: Vec<Vec<u64>>,
     /// Set the zstd compression level for this run (default: 3).
     #[arg(long)]
     pub level: Option<i32>,
@@ -71,4 +71,93 @@ pub struct Cli {
     /// Print verbose debug logs.
     #[arg(long, short)]
     pub verbose: bool,
+}
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+enum ParseState {
+    RecordingId,
+    WaitingRangeEnd(u64),
+    JustComma,
+}
+fn parse_ids(s: &str) -> anyhow::Result<Vec<u64>> {
+    use ParseState::*;
+    let mut res = Vec::with_capacity(s.len());
+    let mut buf = String::new();
+    let mut state = JustComma;
+    for c in s.chars() {
+        match c {
+            '0'..='9' => {
+                if state == JustComma {
+                    state = RecordingId;
+                }
+                buf.push(c);
+            }
+            ',' => {
+                if let WaitingRangeEnd(first) = state {
+                    // let first = res.last().unwrap_or(&Some(0));
+                    let last = buf.parse::<u64>();
+                    if let Ok(l) = last {
+                        for id in first..=l {
+                            res.push(Some(id));
+                        }
+                    }
+                } else if state == JustComma {
+                    continue;
+                } else {
+                    res.push(buf.parse::<u64>().ok());
+                }
+                state = JustComma;
+                buf.clear();
+            }
+            '-' | '~' => {
+                if state == JustComma {
+                    state = WaitingRangeEnd(0);
+                } else if let WaitingRangeEnd(_) = state {
+                    continue;
+                } else {
+                    state = WaitingRangeEnd(if let Ok(id) = buf.parse::<u64>() {
+                        id
+                    } else {
+                        state = JustComma;
+                        continue;
+                    });
+                    buf.clear();
+                }
+            }
+            _ => {
+                continue;
+            }
+        }
+    }
+    if !buf.is_empty() {
+        if let WaitingRangeEnd(first) = state {
+            // let first = res.last().unwrap_or(&Some(0));
+            let last = buf.parse::<u64>();
+            if let Ok(l) = last {
+                for id in first..=l {
+                    res.push(Some(id));
+                }
+            }
+        } else {
+            res.push(buf.parse::<u64>().ok());
+        }
+        buf.clear();
+    }
+    Ok(res.iter().filter_map(|x| *x).collect())
+}
+#[cfg(test)]
+mod test {
+    use super::*;
+    macro_rules! tpi{
+        ($s: expr,$($t: expr),*) => {
+            assert_eq!(parse_ids($s).unwrap(),vec![$($t),*]);
+        }
+    }
+    #[test]
+    fn test_parse_ids() {
+        tpi!("0,5,6,70,", 0, 5, 6, 70_u64);
+        tpi!("0,6,7-9", 0, 6, 7, 8, 9_u64);
+        tpi!("0,,6-~8,", 0, 6, 7, 8_u64);
+        tpi!("5_000_090,7,8", 5000090, 7, 8_u64);
+        tpi!("-5", 0, 1, 2, 3, 4, 5_u64);
+    }
 }

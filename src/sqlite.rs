@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use minus::{Pager, page_all};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::{fs::File, path::Path, time::Duration};
 use tabled::{Table, Tabled, settings::Style};
 
@@ -142,7 +142,9 @@ impl Database {
                         time: row.get(4)?,
                     })
                 }))
+                .optional()
             })
+            .filter_map(|x| x.transpose())
             .collect()
     }
     pub fn select_by_path(
@@ -175,7 +177,7 @@ impl Database {
         {
             let mut stmt = tx.prepare("DELETE FROM trash WHERE id = ?1")?;
             for id in ids {
-                let affected = stmt.execute(params![id])?;
+                let affected = stmt.execute(params![id]).unwrap_or(0);
                 verbose_println!("Deleted row with id {id} (affected: {affected})");
             }
         }
@@ -248,6 +250,10 @@ pub fn n_days_ago_humanlize(then: i64) -> String {
 }
 
 pub fn list(rows: &[DatabaseRow]) -> Result<()> {
+    if rows.is_empty() {
+        println!("Nothing.");
+        return Ok(());
+    }
     let pager = Pager::new();
     let table = Table::new(
         rows.iter()

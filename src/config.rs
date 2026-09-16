@@ -136,9 +136,10 @@ pub fn init() -> Result<Todo> {
             Some(p.clone())
         })
         .collect();
+    let restore: Vec<i64> = cli.restore.iter().flatten().map(|x| *x as i64).collect();
     let mut to_restore = HashMap::with_capacity(cli.restore.len());
-    for i in 0..cli.restore.len() {
-        to_restore.insert(cli.restore[i] as i64, cli.output.get(i).cloned());
+    for i in 0..restore.len() {
+        to_restore.insert(restore[i], cli.output.get(i).cloned());
     }
     Ok(Todo {
         to_remove,
@@ -152,11 +153,11 @@ pub fn init() -> Result<Todo> {
         level: config.compression_level,
         to_restore,
         cover: config.cover_mode,
-        to_delete: cli.delete.iter().map(|&x| x as i64).collect(),
+        to_delete: cli.delete.iter().flatten().map(|&x| x as i64).collect(),
         autoclearn: cli.autoclean,
         save_time: config.save_time,
         trash_dir: config.trash_dir,
-        show: cli.show.iter().map(|&x| x as i64).collect(),
+        show: cli.show.iter().flatten().map(|&x| x as i64).collect(),
         list: cli.list,
         clear: cli.clear,
         select: cli.select,
