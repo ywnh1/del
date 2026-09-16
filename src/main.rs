@@ -222,6 +222,10 @@ fn main() -> Result<()> {
         verbose_println!("Showing {} record(s) by id", todo.show.len());
         db.list_by_id(&todo.show)?;
     }
+    if !todo.select.is_empty() {
+        verbose_println!("Selecting {} patterns", todo.select.len());
+        db.list_by_path(&todo.select)?;
+    }
 
     Ok(())
 }

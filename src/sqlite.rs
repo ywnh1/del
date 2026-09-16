@@ -3,10 +3,9 @@ use crate::{
     verbose_dbg, verbose_println,
 };
 use anyhow::{Result, anyhow};
-use humantime::format_duration;
 use minus::{Pager, page_all};
 use rusqlite::{Connection, params};
-use std::{fs::File, path::Path};
+use std::{fs::File, path::Path, time::Duration};
 use tabled::{Table, Tabled, settings::Style};
 
 #[derive(Debug)]
@@ -146,6 +145,31 @@ impl Database {
             })
             .collect()
     }
+    pub fn select_by_path(
+        &mut self,
+        paths: &[String],
+    ) -> Result<Vec<DatabaseRow>, rusqlite::Error> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM trash WHERE original_path LIKE ?1")?;
+        let mut res = Vec::new();
+        for path in paths {
+            verbose_println!("Selecting by path: {path}");
+            let path = format!("%{path}%");
+            let all = stmt.query_map(params![path], |row| {
+                Ok(DatabaseRow {
+                    id: row.get(0)?,
+                    original_path: row.get(1)?,
+                    present_path: row.get(2)?,
+                    size: row.get(3)?,
+                    time: row.get(4)?,
+                })
+            })?;
+            let r: Vec<_> = all.filter_map(|x| x.ok()).collect();
+            res.extend(r);
+        }
+        Ok(res)
+    }
     pub fn delete_by_id(&mut self, ids: &[i64]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
@@ -180,6 +204,11 @@ impl Database {
         list(&info)?;
         Ok(())
     }
+    pub fn list_by_path(&mut self, paths: &[String]) -> Result<()> {
+        let res = self.select_by_path(paths)?;
+        list(&res)?;
+        Ok(())
+    }
     pub fn clear(&mut self) -> Result<()> {
         self.conn.execute_batch("DROP TABLE IF EXISTS trash;")?;
         verbose_println!("Trash table cleared");
@@ -192,10 +221,30 @@ pub fn n_days_ago(n: u32) -> u64 {
     timestamp_ms().saturating_sub(n as u64 * 86_400_000)
 }
 
+fn format_duration(d: Duration) -> String {
+    const SEC_PER_DAY: u64 = 24 * 60 * 60;
+    const SEC_PER_HOUR: u64 = 60 * 60;
+    const SEC_PER_MINUTE: u64 = 60;
+    let secs = d.as_secs();
+    if secs <= 60 {
+        return format!("{secs}s");
+    }
+    let days = secs / SEC_PER_DAY;
+    let hours = secs % SEC_PER_DAY / SEC_PER_HOUR;
+    let mins = secs % SEC_PER_HOUR / SEC_PER_MINUTE;
+    let secs = secs % SEC_PER_MINUTE;
+    if days != 0 {
+        format!("{}d {}h", days, hours)
+    } else if hours != 0 {
+        format!("{}h {}m", hours, mins)
+    } else {
+        format!("{}m {}s", mins, secs)
+    }
+}
 pub fn n_days_ago_humanlize(then: i64) -> String {
     let ms = timestamp_ms().saturating_sub(then as u64);
-    let d = core::time::Duration::from_millis(ms);
-    format!("{} ago", format_duration(d))
+    let d = Duration::from_millis(ms);
+    format_duration(d)
 }
 
 pub fn list(rows: &[DatabaseRow]) -> Result<()> {

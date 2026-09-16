@@ -12,6 +12,9 @@ pub struct Cli {
     /// Ignored while safe mode is on.
     #[arg(short, long)]
     pub force: bool,
+    /// Select entries like the patterns.
+    #[arg(short = 'x', long, value_delimiter = ',', value_name = "PATTERN")]
+    pub select: Vec<String>,
     /// Remove directories recursively with --force.
     /// Without --force, directories are packed recursively automatically.
     #[arg(short, long)]

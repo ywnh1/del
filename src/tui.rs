@@ -42,7 +42,54 @@ struct File {
     file_type: FileType,
     children: Option<Vec<Arc<Mutex<File>>>>,
     parent: Option<Weak<Mutex<Self>>>,
-    size: u64,
+    size: Option<u64>,
+}
+
+trait FileArcExt {
+    fn resize(&self);
+}
+
+impl FileArcExt for Arc<Mutex<File>> {
+    fn resize(&self) {
+        let mut guard = self.lock().unwrap();
+        guard.size = if let Some(children) = guard.children.clone() {
+            Some(
+                children
+                    .iter()
+                    .map(|child| {
+                        child.resize();
+                        child.lock().unwrap().size.unwrap()
+                    })
+                    .sum(),
+            )
+        } else {
+            guard.file_type.get_size()
+        };
+    }
+}
+
+impl PartialEq for File {
+    fn eq(&self, other: &Self) -> bool {
+        if let Some(size1) = self.size
+            && let Some(size2) = other.size
+        {
+            size1 == size2
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialOrd for File {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if let Some(size1) = self.size
+            && let Some(size2) = other.size
+        {
+            size1.partial_cmp(&size2)
+        } else {
+            None
+        }
+    }
 }
 
 impl File {
@@ -77,23 +124,17 @@ impl File {
                 path.read_dir()?
                     .filter_map(|entry| {
                         let entry = entry.ok()?;
-                        File::new(&entry.path(), None, sender.clone()).ok()
+                        let file = File::new(&entry.path(), None, sender.clone()).ok()?;
+                        Some(file)
                     })
                     .collect(),
             )
         } else {
             None
         };
-        let size = if let Some(size) = file_type.get_size() {
-            size
-        } else if let Some(children) = &children {
-            children
-                .iter()
-                .map(|child| child.lock().unwrap().size)
-                .sum()
-        } else {
-            0
-        };
+
+        let size = None;
+
         let res = Arc::new(Mutex::new(Self {
             path: path.to_path_buf(),
             file_type,
@@ -116,33 +157,43 @@ impl File {
 
         Ok(res)
     }
+
     fn size(&self) -> String {
-        let size = self.size as f64;
-        const KIB: f64 = 1024.;
-        const MIB: f64 = KIB * KIB;
-        const GIB: f64 = MIB * KIB;
-        const TIB: f64 = GIB * KIB;
-        const PIB: f64 = TIB * KIB;
-        let (size, format) = if size <= KIB {
-            (size, "B")
-        } else if size <= MIB {
-            (size / KIB, "KiB")
-        } else if size <= GIB {
-            (size / MIB, "MiB")
-        } else if size <= TIB {
-            (size / GIB, "GiB")
-        } else if size <= PIB {
-            (size / TIB, "TiB")
+        if let Some(s) = self.size {
+            let size = s as f64;
+
+            const KIB: f64 = 1024.;
+            const MIB: f64 = KIB * KIB;
+            const GIB: f64 = MIB * KIB;
+            const TIB: f64 = GIB * KIB;
+            const PIB: f64 = TIB * KIB;
+            let (size, format) = if size <= KIB {
+                (size, "B")
+            } else if size <= MIB {
+                (size / KIB, "KiB")
+            } else if size <= GIB {
+                (size / MIB, "MiB")
+            } else if size <= TIB {
+                (size / GIB, "GiB")
+            } else if size <= PIB {
+                (size / TIB, "TiB")
+            } else {
+                (size / PIB, "PiB")
+            };
+            format!("{size:.2}{format}")
         } else {
-            (size / PIB, "PiB")
-        };
-        format!("{size:.2}{format}")
+            "Unknown".to_string()
+        }
     }
-    fn name(&self) -> &str {
-        self.path
-            .file_name()
+    fn name(&self) -> String {
+        let p = self
+            .path
+            .canonicalize()
+            .unwrap_or_else(|_| self.path.clone());
+        p.file_name()
             .and_then(|os| os.to_str())
-            .unwrap_or(self.path.to_str().unwrap_or("."))
+            .unwrap_or("/")
+            .to_owned()
     }
 }
 #[derive(Debug, Clone)]
@@ -198,7 +249,7 @@ impl<'a> Tui<'a> {
     fn new() -> Result<Self> {
         let backend = CrosstermBackend::new(stdout());
         let terminal = Terminal::new(backend)?;
-        let list_state = ListState::default().with_selected(Some(1));
+        let list_state = ListState::default().with_selected(Some(0));
         Ok(Self {
             terminal,
             weights: UI::new(),
@@ -238,9 +289,18 @@ impl<'a> Tui<'a> {
         self.terminal.draw(|f| {
             // 一定要确保传入的是一个 dir
             // 构建 list
-            let guard = current_dir.lock().unwrap();
+            let mut guard = current_dir.lock().unwrap();
             let children = guard.children.clone().unwrap();
-            let items = children
+            let mut items = children
+                .iter()
+                .map(|child| (child.lock().unwrap().size.unwrap(), child.clone()))
+                .collect::<Vec<(u64, Arc<Mutex<File>>)>>();
+            items.sort_unstable_by_key(|(size, _)| std::cmp::Reverse(*size));
+
+            let new_children: Vec<Arc<Mutex<File>>> =
+                items.into_iter().map(|(_, new_child)| new_child).collect();
+
+            let items = new_children
                 .iter()
                 .map(|child| {
                     let child = child.lock().unwrap();
@@ -250,6 +310,9 @@ impl<'a> Tui<'a> {
                     ])
                 })
                 .collect::<Vec<ListItem>>();
+
+            guard.children = Some(new_children);
+
             let list = List::new(items)
                 .block(
                     UI::MAIN_BLOCK
@@ -326,6 +389,7 @@ pub fn main_loop(path: PathBuf) -> Result<()> {
     };
 
     let mut current_dir = root.clone();
+    current_dir.resize();
 
     loop {
         tui.main_draw(Arc::clone(&current_dir))?;
@@ -335,23 +399,26 @@ pub fn main_loop(path: PathBuf) -> Result<()> {
                 Up => tui.list_state.select_previous(),
                 Down => tui.list_state.select_next(),
                 Char('d') => {
-                    let mut guard = current_dir.lock().unwrap();
-                    let mut child =
-                        Command::new(std::env::args().next().unwrap_or("del".to_string()))
-                            .arg(
-                                &guard.children.clone().unwrap()
-                                    [tui.list_state.selected().unwrap()]
-                                .lock()
-                                .unwrap()
-                                .path,
-                            )
-                            .spawn()?;
-                    std::thread::spawn(move || {
-                        let _ = child.wait();
-                    });
-                    if let Some(children) = guard.children.as_mut() {
-                        children.remove(tui.list_state.selected().unwrap());
+                    {
+                        let mut guard = current_dir.lock().unwrap();
+                        let mut child =
+                            Command::new(std::env::args().next().unwrap_or("del".to_string()))
+                                .arg(
+                                    &guard.children.clone().unwrap()
+                                        [tui.list_state.selected().unwrap()]
+                                    .lock()
+                                    .unwrap()
+                                    .path,
+                                )
+                                .spawn()?;
+                        std::thread::spawn(move || {
+                            let _ = child.wait();
+                        });
+                        if let Some(children) = guard.children.as_mut() {
+                            children.remove(tui.list_state.selected().unwrap());
+                        }
                     }
+                    current_dir.resize();
                 }
                 Char('s') => {
                     let guard = current_dir.lock().unwrap();

@@ -122,17 +122,12 @@ pub fn init() -> Result<Todo> {
         .path
         .par_iter()
         .filter_map(|p| {
+            let p = &p.canonicalize().ok()?;
             if !p.exists() {
                 return None;
             } else {
                 for disable in &config.disable_list {
-                    if disable.exists()
-                        && disable
-                            .canonicalize()
-                            .ok()?
-                            .strip_prefix(p.canonicalize().ok()?)
-                            .is_ok()
-                    {
+                    if disable.exists() && disable.canonicalize().ok()?.strip_prefix(p).is_ok() {
                         verbose_println!("Skip {:#?}: contains disabled path {:#?}", p, disable);
                         return None;
                     }
@@ -164,11 +159,13 @@ pub fn init() -> Result<Todo> {
         show: cli.show.iter().map(|&x| x as i64).collect(),
         list: cli.list,
         clear: cli.clear,
+        select: cli.select,
     })
 }
 
 #[derive(Debug, Clone)]
 pub struct Todo {
+    pub select: Vec<String>,
     /// Paths to delete
     pub to_remove: Vec<PathBuf>,
     /// Whether to delete forever instead of moving to the trash
