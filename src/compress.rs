@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ywnh1
+
 use crate::config::CoverMode;
 use crate::{input, verbose_dbg, verbose_println};
 use anyhow::{Result, anyhow};
@@ -158,7 +161,7 @@ pub fn unpack(src: &Path, output_dir: &Path, cover: CoverMode) -> Result<UnpackS
                             stats.skipped += 1;
                         }
                         CoverMode::Ask => {
-                            match input!("{dest:?} already exists. Overwrite it? [Y/n] ").as_str() {
+                            match input!("{dest:?} already exists. Overwrite it? [y/N] ").as_str() {
                                 "Y" | "y" => {
                                     entry.unpack_in(output_dir)?;
                                     stats.restored += 1;

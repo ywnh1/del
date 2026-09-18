@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ywnh1
+
 use crate::cli::Cli;
 use crate::tui::main_loop;
 use crate::{VERBOSE, verbose_dbg, verbose_println};
@@ -138,8 +141,8 @@ pub fn init() -> Result<Todo> {
         .collect();
     let restore: Vec<i64> = cli.restore.iter().flatten().map(|x| *x as i64).collect();
     let mut to_restore = HashMap::with_capacity(cli.restore.len());
-    for i in 0..restore.len() {
-        to_restore.insert(restore[i], cli.output.get(i).cloned());
+    for (i, &k) in restore.iter().enumerate() {
+        to_restore.insert(k, cli.output.get(i).cloned());
     }
     Ok(Todo {
         to_remove,

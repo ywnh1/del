@@ -1,70 +1,122 @@
 # del — Safe & Secure Deletion
 
-> A delete tool with a safety net: removed files are compressed into a trash and can be restored anytime.
+**English** | [简体中文](README.zh-CN.md) · 📖 [User Guide](docs/guide.md)
+
+> A delete tool with a safety net: files are packed into a trash before they
+> disappear, and can be restored at any time.
+
+`del` turns deletion into two deliberate steps — soft delete into the trash, and
+an explicit `--autoclean` that actually frees disk space — and backs them with a
+protected-path list plus a safe mode that is on by default.
 
 ## ✨ Highlights
 
-**Four layers of safety** turn the fear of `rm` accidents into a thing of the past:
+**Four layers of safety** turn the fear of an `rm` accident into a thing of the past:
 
 | # | Layer |
 |---|-------|
 | ① | **Trash**: deletions go to `~/.trash` first; list with `-l`, restore with `-R` |
-| ② | **Safe Mode (on by default)**: `--force` is ignored, so files can't bypass the trash |
-| ③ | **Disable List**: critical system paths (home, `/`, `/etc`, `/usr`, `/boot`, ...) are never deleted |
-| ④ | **Deferred deletion**: data stays archived until you explicitly run `--autoclean` to free disk space |
+| ② | **Safe mode (on by default)**: `--force` is ignored, so nothing bypasses the trash |
+| ③ | **Disable list**: critical paths (home, `/`, `/etc`, `/usr`, `/boot`, ...) are never deleted |
+| ④ | **Deferred deletion**: data stays archived until you run `--autoclean` to free disk space |
 
-**Content-addressed storage**: archives are named by their content hash, so identical files are stored **only once** — later copies overwrite earlier ones and the trash stays tiny.
+**Content-addressed archives**: each archive is named by the blake3 hash of its own bytes, so re-deleting an unchanged path reuses one file instead of piling up copies. The hash covers the packed archive (tar header + zstd frame), not the file contents — see [deduplication](docs/guide.md#82-deduplication-what-actually-happens).
 
 ---
 
 ## Why
 
-`rm` is irreversible: one typo and your data is gone. `del` turns deletion into two deliberate steps:
+`rm` is irreversible: one typo, one wrong wildcard, one script that ran in the wrong directory, and the data is gone. `del` makes deletion two deliberate steps:
 
-1. **Soft delete** — files are compressed into the trash (instantly restorable);
-2. **Hard release** — disk space is only freed when you explicitly run `--autoclean`.
+1. **Soft delete** — the file is packed (tar + zstd) into the trash and a record is written to SQLite; restore it whenever you want.
+2. **Hard release** — disk space is freed only when you run `--autoclean`.
+
+## Install
+
+Rust 1.88 or newer is required (the crate uses edition 2024, including let-chains).
+
+```bash
+cargo install --path .
+```
 
 ## Quick Start
 
 ```bash
-# Install
-cargo install --path .
-
-# Delete a file (moves it into the trash; the original disappears)
+# Delete a file: it moves into the trash, the original disappears
 del ~/tmp/old-report.txt
 
-# List the trash
+# See what is in the trash
 del -l
 
-# Restore entry 1 to its original location
+# Restore record 1 to its original location
 del -R 1
 
-# Restore to a different directory
+# Restore it somewhere else instead
 del -R 1 -o ~/Downloads
 
-# Clean the trash: drop expired records and files with no record (frees space)
+# Free disk space: drop expired records and unreferenced archives
 del -a
+
+# Browse and delete in a terminal UI
+del -t ~/Downloads
 ```
 
 ## Commands
 
+Run `del -h` for a one-line summary and `del --help` for the full description of
+every option.
+
+### Deleting
+
 | Command | Description |
 |---------|-------------|
-| `del <path>...` | Delete files/directories into the trash |
-| `del -f <path>` | Force a permanent delete (no-op in safe mode) |
-| `del -r` | Recursively remove directories with `-f` |
-| `del -l` | List every trash entry |
-| `del -w <id>` | Show details by id (comma-separated) |
-| `del -R <id>` | Restore by id (comma-separated) |
-| `del -d <id>` | Delete records by id (files stay until autoclean) |
-| `del -a` | Autoclean: expired records + files with no record |
-| `del -S <path>` | Pack into the trash without removing the originals |
-| `del -C <mode>` | Behavior on restore conflict: `always` / `ask` / `never` |
-| `del -o <path>` | Custom restore directory, one per `-R` id |
-| `del --disable <path>` | Append protected paths (comma-separated) |
-| `del --trash-dir <dir>` | Trash directory (default `~/.trash`) |
-| `del --save-time <days>` | Retention days for autoclean (default 30) |
-| `del -v` | Verbose debug logs |
+| `del <path>...` | Pack files/directories into the trash and remove the originals |
+| `del -S <path>...` | Pack into the trash but keep the originals (`--save`) |
+| `del -f <path>...` | Delete permanently (ignored while safe mode is on) |
+| `del -f -r <dir>` | Delete a directory tree permanently |
+| `del -t [path]` | Browse and delete in a TUI (`path` defaults to `.`) |
+
+TUI keys: arrows move, `Enter` / `→` opens a directory, `←` goes back up, `d`
+deletes the selection into the trash, `s` packs it like `-S`, `q` / `Esc` quits.
+
+### Trash records
+
+| Command | Description |
+|---------|-------------|
+| `del -l` | List every record |
+| `del -w <id>...` | Show the given records in detail |
+| `del -x <pattern>...` | List records whose original path contains a pattern |
+| `del -R <id>...` | Restore records |
+| `del -d <id>...` | Drop records, keeping the packed files |
+
+`-l`, `-w` and `-x` show a table in a pager: press `q` to quit, `/` to search.
+
+### Maintenance
+
+| Command | Description |
+|---------|-------------|
+| `del -a` | Clean the trash: expired records plus archives no record points at |
+| `del -c` | Drop every record after a confirmation prompt (archives stay) |
+| `del --level <n>` | zstd compression level for this run (default 3) |
+| `del --save-time <days>` | Retention window used by `-a` (default 30) |
+| `del --trash-dir <dir>` | Use another trash directory (default `~/.trash`) |
+| `del --disable <path>,...` | Protect extra paths for this run |
+| `del -s` | Force safe mode on |
+| `del -v` | Print debug logs, prefixed with `file:line` |
+
+### Ids
+
+Every id argument accepts the same syntax:
+
+- `3` — one id
+- `2,5,9` — a comma-separated list
+- `2-5` or `2~5` — an inclusive range
+- `-5` — shorthand for `0-5`; it starts with a dash, so pass it in the `=`
+  form: `del --show=-5` or `del -R=-5`
+- Repeat the flag to add more: `del -R 1,2 -R 7`
+
+Any character other than a digit, `,`, `-` or `~` is ignored, so a list pasted
+from elsewhere still works.
 
 ## Configuration
 
@@ -74,12 +126,14 @@ Optional config file `~/.config/del/config.toml`:
 trash_dir = "/data/.trash"       # trash location
 safe_mode = true                 # on by default
 compression_level = 6            # zstd level (default 3)
-save_time = 30                   # days autoclean keeps entries
+save_time = 30                   # days of retention used by --autoclean
 cover_mode = "ask"               # always / ask / never
-disable_list = ["/boot", "/etc"] # replaces the default protected list
+disable_list = ["/boot", "/etc"] # REPLACES the built-in protected list
 ```
 
-Every option can also be overridden via environment variables with the `DEL_` prefix (keys are lowercased automatically; list values use TOML array syntax). Precedence: **CLI flags > environment variables > config file > defaults**.
+Every key can also be set through environment variables with the `DEL_` prefix; keys are lowercased (`DEL_SAFE_MODE`, `DEL_TRASH_DIR`, ...). List values use TOML array syntax.
+
+Precedence: **CLI flags > environment variables > config file > built-in defaults**.
 
 ```bash
 # Environment variable examples
@@ -87,32 +141,45 @@ DEL_TRASH_DIR=/data/.trash DEL_COVER_MODE=never del -l
 DEL_DISABLE_LIST='["/boot","/etc"]' del /some/path
 ```
 
+`safe_mode` can only be turned **on** from the command line (`-s`), so skipping
+the trash for one run means overriding the config:
+
+```bash
+DEL_SAFE_MODE=false del -f ~/junk.log   # really delete, straight past the trash
+```
+
 ## How It Works
 
 ```
-Delete del <path>
-  ├─ 1. Compress with zstd + tar
+Delete   del <path>
+  ├─ 1. Pack with tar + zstd
   ├─ 2. Name by content hash → ~/.trash/<hash>.bak
-  │        (same content → same hash → overwritten, stored once)
-  ├─ 3. Record into SQLite (id / original path / archive path / size / time)
+  │        (same content → same name → stored once)
+  ├─ 3. Insert a record into SQLite (id / original path / archive path / size / time)
   └─ 4. Remove the original (-S keeps it)
 
-Restore del -R <id>
-  ├─ Unpack to the original location (or -o target)
-  └─ Delete the record only when fully restored; skipped entries are kept for retry
+Restore  del -R <id>
+  ├─ Unpack into the original directory (or the matching -o target)
+  └─ Drop the record only after a complete restore; entries skipped by the
+     cover mode keep their record so the restore can be retried
 
-Clean del -a
-  ├─ Drop records older than the retention period
-  └─ Delete trash files with no database record (this actually frees space)
+Clean    del -a
+  ├─ Pass 1: delete archives that no record points at
+  └─ Pass 2: drop records older than --save-time
+     (their archives are collected by the next -a run)
 ```
 
 ## The Four Layers of Safety
 
 1. **Trash** — every deletion lands in `~/.trash` first; list with `-l`, restore with `-R`. Deletion is never one-way.
-2. **Safe Mode (on by default)** — `--force` is ignored, so files cannot bypass the trash unless you explicitly opt out.
-3. **Disable List** — `~/.trash`, your home directory and critical system directories (`/`, `/boot`, `/etc`, `/usr`, `/var`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/opt`, `/root`, `/home`, `/proc`, `/sys`, `/dev`, `/tmp`) are protected by default; any delete request that contains (or equals) a protected path is skipped and left untouched.
-4. **Deferred deletion** — "deleting" only moves data into the trash; disk space is not freed until you run `--autoclean`. `--delete` / `--clear` touch records only, never the archived files.
+2. **Safe mode (on by default)** — `--force` is ignored, so files cannot bypass the trash. No command-line flag switches it off: set `safe_mode = false` in the config file, or run with `DEL_SAFE_MODE=false`.
+3. **Disable list** — `~/.trash`, your home directory and the system directories `/`, `/boot`, `/etc`, `/usr`, `/var`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/opt`, `/root`, `/home`, `/proc`, `/sys`, `/dev` and `/tmp` are protected by default. Any delete target that contains (or equals) a protected path is skipped and left untouched. `--disable a,b` **appends** to the list for that run; `disable_list` in the config file **replaces** the built-in defaults.
+4. **Deferred deletion** — deleting only moves data into the trash; disk space is freed by `--autoclean`. `--delete` and `--clear` touch records only, never the archives.
 
 ## Content-Addressed Storage
 
-Archives are named by the **blake3 hash of their content**. Deleting the same file twice — or two identical files — produces the same hash, so the second copy simply overwrites the first. Each unique file is stored exactly once, keeping the trash tiny.
+An archive is named `<blake3 of the archive>.bak`. The hash is taken over the packed bytes — the tar stream (entry name, mode, mtime) plus the zstd frame — not over the original file contents. Two identical files with different names therefore get two archives, while deleting one unchanged path twice reuses a single one. The guide's [deduplication section](docs/guide.md#82-deduplication-what-actually-happens) spells out exactly what this does and does not collapse.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

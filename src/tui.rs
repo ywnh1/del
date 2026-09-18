@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ywnh1
+
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, poll},

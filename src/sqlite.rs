@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ywnh1
+
 use crate::{
     compress::{PackResult, timestamp_ms},
     verbose_dbg, verbose_println,
@@ -94,6 +97,12 @@ impl Database {
         Ok(Self { conn })
     }
     pub fn insert_many(&mut self, lines: &[DatabaseRow]) -> Result<()> {
+        // An empty insert is a no-op. Return before opening the transaction:
+        // preparing the statement would fail whenever the table is gone, for
+        // example right after clear() dropped it.
+        if lines.is_empty() {
+            return Ok(());
+        }
         let tx = self.conn.transaction()?;
         {
             let mut stmt = tx.prepare(
@@ -265,4 +274,31 @@ pub fn list(rows: &[DatabaseRow]) -> Result<()> {
     pager.set_prompt("Press 'q' to exit | Press '/' to search")?;
     page_all(pager)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `insert_many` prepares an INSERT before looping, so an empty slice used to
+    /// fail once `clear()` had dropped the table. Keep the no-op guaranteed:
+    /// `del -c` (clear only) must not end in `Error: no such table: trash`.
+    #[test]
+    fn empty_insert_many_is_a_noop_after_clear() {
+        let path = std::env::temp_dir().join(format!(
+            "del-empty-insert-{}.db",
+            std::process::id()
+        ));
+        {
+            let mut db = Database::new(&path).expect("open temp database");
+            db.clear().expect("clear drops the table");
+            db.insert_many(&[])
+                .expect("an empty insert must not touch the dropped table");
+        }
+        // Close the connection first: SQLite keeps -wal/-shm side files open
+        // until then, so removing only the main file would litter the temp dir.
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
+    }
 }

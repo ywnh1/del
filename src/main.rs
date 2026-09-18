@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ywnh1
+
 use std::{
     collections::HashSet,
     fs,
@@ -82,7 +85,7 @@ fn main() -> Result<()> {
     }
     if todo.clear {
         match input!(
-            "Permanently remove all trash records? Packed files stay until autoclean. [Y/n] "
+            "Permanently remove all trash records? Packed files stay until autoclean. [y/N] "
         )
         .as_str()
         {
@@ -96,6 +99,13 @@ fn main() -> Result<()> {
         }
     }
     if todo.autoclearn {
+        // SQLite keeps side files next to the database (-wal, -shm, -journal).
+        // They belong to the database, so an autoclean sweep must not collect
+        // them as if they were orphaned archives.
+        let db_name = db_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("database.db");
         let set: HashSet<PathBuf> = db
             .select_all()?
             .par_iter()
@@ -112,7 +122,7 @@ fn main() -> Result<()> {
             let file = file?.path();
             verbose_println!("Checking {file:?}");
             if let Some(name) = file.file_name()
-                && name.to_str() == Some("database.db")
+                && name.to_str().is_some_and(|n| n.starts_with(db_name))
             {
                 verbose_println!("Skipping the database file");
                 continue;
