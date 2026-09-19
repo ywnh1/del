@@ -77,7 +77,8 @@ pub struct Cli {
     pub delete: Vec<Vec<u64>>,
     /// zstd compression level for this run
     ///
-    /// Higher is smaller and slower; 1 is fastest, 19 is a practical maximum.
+    /// Higher is smaller and slower; 1 is fastest.
+    /// if it's bigger than 22, it'll falls to 22.
     /// Defaults to compression_level from the config file (3).
     #[arg(long)]
     pub level: Option<i32>,
@@ -124,7 +125,7 @@ pub struct Cli {
     /// file stays in place. --force is ignored when --save is given.
     #[arg(long, short = 'S')]
     pub save: bool,
-    /// Drop every trash record after a confirmation prompt
+    /// Drop every trash record after a confirmation prompt and then exit
     ///
     /// Only "y" or "Y" proceeds; any other input, including Enter, cancels. The
     /// packed files are not deleted, so run --autoclean afterwards to reclaim the
@@ -146,7 +147,7 @@ pub struct Cli {
     /// matching value fall back to their original directory.
     #[arg(long, short, value_name = "PATH", value_delimiter = ',')]
     pub output: Vec<PathBuf>,
-    /// Browse and act on files in a terminal UI
+    /// Browse and act on files in a terminal UI and exit
     ///
     /// PATH defaults to the current directory. In the UI, arrows move, Enter or
     /// Right opens a directory, Left goes back up, d deletes the selection into

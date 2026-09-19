@@ -97,6 +97,7 @@ fn main() -> Result<()> {
                 verbose_println!("User declined clearing the trash");
             }
         }
+        return Ok(());
     }
     if todo.autoclearn {
         // SQLite keeps side files next to the database (-wal, -shm, -journal).
@@ -203,7 +204,14 @@ fn main() -> Result<()> {
                 ))
             })
             .filter_map(|(src, output_dir, id)| {
-                let stats = compress::unpack(src, output_dir, todo.cover).ok()?;
+                let stats = compress::unpack(src, output_dir, todo.cover);
+                let stats = match stats {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return None;
+                    }
+                };
                 if stats.skipped > 0 {
                     // 有条目因覆盖策略未恢复，保留数据库记录以便重试
                     verbose_println!(

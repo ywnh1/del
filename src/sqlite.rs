@@ -285,10 +285,7 @@ mod tests {
     /// `del -c` (clear only) must not end in `Error: no such table: trash`.
     #[test]
     fn empty_insert_many_is_a_noop_after_clear() {
-        let path = std::env::temp_dir().join(format!(
-            "del-empty-insert-{}.db",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("del-empty-insert-{}.db", std::process::id()));
         {
             let mut db = Database::new(&path).expect("open temp database");
             db.clear().expect("clear drops the table");

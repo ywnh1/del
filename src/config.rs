@@ -13,6 +13,7 @@ use figment::{
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::process::exit;
 use std::{collections::HashMap, path::PathBuf};
 #[derive(
     Debug, Copy, Clone, Hash, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize, ValueEnum,
@@ -97,7 +98,13 @@ pub fn init() -> Result<Todo> {
     );
 
     if let Some(path) = cli.tui {
-        main_loop(path).unwrap();
+        match main_loop(path) {
+            Ok(_) => exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                exit(1);
+            }
+        }
     }
 
     // cli 优先级高于config
@@ -126,14 +133,10 @@ pub fn init() -> Result<Todo> {
         .par_iter()
         .filter_map(|p| {
             let p = &p.canonicalize().ok()?;
-            if !p.exists() {
-                return None;
-            } else {
-                for disable in &config.disable_list {
-                    if disable.exists() && disable.canonicalize().ok()?.strip_prefix(p).is_ok() {
-                        verbose_println!("Skip {:#?}: contains disabled path {:#?}", p, disable);
-                        return None;
-                    }
+            for disable in &config.disable_list {
+                if disable.exists() && disable.canonicalize().ok()?.strip_prefix(p).is_ok() {
+                    verbose_println!("Skip {:#?}: contains disabled path {:#?}", p, disable);
+                    return None;
                 }
             }
             Some(p.clone())
